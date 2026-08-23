@@ -44,7 +44,8 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
           <p className="text-xs text-inkSoft mt-4 text-center">
-            No account? Ask your Admin or Master to create one for you.
+            No account? Ask your Admin or Master to create one for you.<br />
+            Forgot your password? Ask your Master to reset it from the Master page.
           </p>
         </div>
       </div>
