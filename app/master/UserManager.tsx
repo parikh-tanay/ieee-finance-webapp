@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { createUser, updateUserRole, deleteUser } from './actions';
+import { createUser, updateUserRole, deleteUser, resetUserPassword } from './actions';
 
 type Profile = { id: string; full_name: string; role: string; created_at: string };
 
@@ -10,6 +10,9 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [form, setForm] = useState({ fullName: '', email: '', role: 'user', password: '' });
+  const [resetTarget, setResetTarget] = useState<Profile | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetError, setResetError] = useState('');
 
   function submit() {
     setError(''); setMsg('');
@@ -32,6 +35,20 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
   function remove(id: string) {
     if (!confirm('Remove this account? They will lose access immediately.')) return;
     startTransition(async () => { await deleteUser(id); });
+  }
+
+  function submitReset() {
+    setResetError('');
+    if (!resetTarget) return;
+    startTransition(async () => {
+      const res = await resetUserPassword(resetTarget.id, resetPassword);
+      if (res?.error) {
+        setResetError(res.error);
+      } else {
+        setResetTarget(null);
+        setResetPassword('');
+      }
+    });
   }
 
   return (
@@ -88,7 +105,8 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
                     <option value="master">Master</option>
                   </select>
                 </td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                  <button onClick={() => { setResetTarget(p); setResetPassword(''); setResetError(''); }} className="text-gold text-xs mr-3">Reset Password</button>
                   <button onClick={() => remove(p.id)} className="text-expense text-xs">Remove</button>
                 </td>
               </tr>
@@ -96,6 +114,24 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
           </tbody>
         </table>
       </div>
+
+      {resetTarget && (
+        <div className="bg-white rounded-lg border border-gold p-5 mt-4 max-w-md">
+          <div className="font-display text-lg mb-1">Reset Password — {resetTarget.full_name}</div>
+          <p className="text-xs text-inkSoft mb-3">Sets a new password immediately. Share it with them directly (not over a public channel).</p>
+          <label className="field-label">New Password (min 8 characters)</label>
+          <input type="text" value={resetPassword} onChange={e => setResetPassword(e.target.value)} className="mb-3" />
+          {resetError && <div className="text-expense text-sm mb-2">{resetError}</div>}
+          <div className="flex gap-2">
+            <button onClick={submitReset} disabled={pending} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">
+              {pending ? 'Working…' : 'Set New Password'}
+            </button>
+            <button onClick={() => { setResetTarget(null); setResetPassword(''); }} className="px-4 py-2 rounded text-sm" style={{ border: '1px solid #DCE2ED', color: '#5B6B8C' }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

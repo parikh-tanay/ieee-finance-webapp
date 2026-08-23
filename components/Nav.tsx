@@ -15,6 +15,7 @@ export default async function Nav() {
     <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
       <div className="flex items-center gap-4">
         <Link href="/" className="font-display text-navy">IEEE SB Ledger</Link>
+        <Link href="/account" className="text-sm text-inkSoft">My Account</Link>
         {(role === 'admin' || role === 'master') && <Link href="/admin" className="text-sm text-inkSoft">Admin</Link>}
         {role === 'master' && <Link href="/master" className="text-sm text-inkSoft">Master</Link>}
       </div>

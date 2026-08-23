@@ -70,3 +70,14 @@ export async function deleteUser(userId: string) {
   revalidatePath('/master');
   return { success: true };
 }
+
+export async function resetUserPassword(userId: string, newPassword: string) {
+  await assertMaster();
+  if (!newPassword || newPassword.length < 8) {
+    return { error: 'New password must be at least 8 characters.' };
+  }
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return { error: error.message };
+  return { success: true };
+}
