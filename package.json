@@ -1,0 +1,28 @@
+{
+  "name": "ieee-finance-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "16.3.2",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "@supabase/ssr": "0.5.2",
+    "@supabase/supabase-js": "2.112.3",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/node": "20.14.15",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.1",
+    "tailwindcss": "3.4.9",
+    "postcss": "8.5.26",
+    "autoprefixer": "10.4.20"
+  }
+}

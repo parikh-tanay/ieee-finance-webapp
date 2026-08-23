@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+input, select, textarea {
+  border: 1px solid #DCE2ED;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  width: 100%;
+  background: white;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #B8892B;
+  outline-offset: 1px;
+}
+label.field-label {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5B6B8C;
+  margin-bottom: 0.25rem;
+}
