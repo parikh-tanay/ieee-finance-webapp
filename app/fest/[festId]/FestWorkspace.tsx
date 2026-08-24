@@ -6,6 +6,18 @@ import { addExpense, addIncome, deleteExpense, deleteIncome } from './actions';
 
 function inr(n: number) { return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
+// Excel sheet names: max 31 chars, no : \ / ? * [ ]
+function sheetName(name: string) {
+  return name.replace(/[:\\/?*\[\]]/g, '').slice(0, 31) || 'Sheet';
+}
+
+const EMPTY_FORM = {
+  categoryId: '', vendorId: '', procuredByVolunteer: '', paidByVolunteer: '', reimbursed: false,
+  itemName: '', quantity: '', rate: '', amount: '', expenseDate: new Date().toISOString().slice(0, 10),
+  travelFrom: '', travelTo: '', vehicleType: '', position: '', winnerName: '', prizeEventId: '',
+  invoiceLink: '', paymentProofLink: '', notes: '',
+};
+
 export default function FestWorkspace({ fest, events, vendors, categories, expenses, income, allocations }: any) {
   const [tab, setTab] = useState('overview');
   const expenseCategories = categories.filter((c: any) => c.kind === 'expense');
@@ -36,7 +48,7 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
     });
 
     const volunteerOwed = expenses
-      .filter((e: any) => e.expense_type !== 'vendor_purchase' && !e.reimbursed)
+      .filter((e: any) => ['volunteer_expense', 'cab_travel', 'personal_vehicle'].includes(e.expense_type) && !e.reimbursed)
       .reduce((s: number, e: any) => s + Number(e.amount), 0);
 
     return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome, volunteerOwed };
@@ -81,8 +93,10 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
 function StatCard({ label, value, tone }: { label: string; value: number; tone: 'income' | 'expense' | 'neutral' }) {
   const color = tone === 'income' ? 'text-income' : tone === 'expense' ? 'text-expense' : 'text-ink';
   return (
-    <div className="bg-white rounded-lg border border-border p-4 flex-1">
-      <div className="text-xs text-inkSoft uppercase tracking-wide mb-1">{label}</div>
+    <div className="rounded-lg p-4 flex-1" style={{ background: '#fff', border: '1px solid #DCE2ED' }}>
+      <div className="flex items-center gap-2 mb-2 text-inkSoft" style={{ fontSize: '0.78rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        {label}
+      </div>
       <div className={`font-mono text-2xl font-semibold ${color}`}>{inr(value)}</div>
     </div>
   );
@@ -113,8 +127,8 @@ function Overview({ totals }: any) {
         <StatCard label="Net" value={totals.net} tone={totals.net >= 0 ? 'income' : 'expense'} />
       </div>
       {totals.volunteerOwed > 0 && (
-        <div className="bg-goldSoft border border-gold rounded-lg px-4 py-3 text-sm mb-5">
-          <strong>{inr(totals.volunteerOwed)}</strong> in volunteer expenses / conveyance is still marked <em>not reimbursed</em> by Section.
+        <div className="rounded-lg px-4 py-3 text-sm mb-5" style={{ background: '#F3E7CC', border: '1px solid #B8892B' }}>
+          <strong>{inr(totals.volunteerOwed)}</strong> in volunteer expenses / cab / personal vehicle is still marked <em>not reimbursed</em> by Section.
         </div>
       )}
       <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -129,16 +143,14 @@ function Overview({ totals }: any) {
 const EXPENSE_TYPES = [
   { id: 'vendor_purchase', label: 'Vendor Purchase' },
   { id: 'volunteer_expense', label: 'Volunteer Expenditure' },
-  { id: 'conveyance', label: 'Conveyance' },
+  { id: 'cab_travel', label: 'Cab Travel' },
+  { id: 'personal_vehicle', label: 'Personal Vehicle' },
+  { id: 'prizepool', label: 'Prizepool' },
 ];
 
 function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
   const [type, setType] = useState('vendor_purchase');
-  const [form, setForm] = useState({
-    categoryId: '', vendorId: '', paidByVolunteer: '', reimbursed: false,
-    itemName: '', quantity: '', rate: '', amount: '',
-    expenseDate: new Date().toISOString().slice(0, 10), driveLink: '', notes: '',
-  });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [allocations, setAllocations] = useState<{ eventId: string; quantity: string; amount: string }[]>([]);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState('');
@@ -152,16 +164,37 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
   }
   function removeAlloc(i: number) { setAllocations(a => a.filter((_, idx) => idx !== i)); }
 
+  // Personal vehicle: auto-calculate amount from km × rate, still overridable.
+  function updateKmOrRate(field: 'quantity' | 'rate', val: string) {
+    setForm(f => {
+      const next = { ...f, [field]: val };
+      const km = Number(field === 'quantity' ? val : f.quantity);
+      const rate = Number(field === 'rate' ? val : f.rate);
+      if (km > 0 && rate > 0) next.amount = String(km * rate);
+      return next;
+    });
+  }
+
   function submit() {
     setError(''); setMsg('');
+
+    if (type === 'prizepool' && !form.prizeEventId) {
+      setError('Select which event this prize belongs to.');
+      return;
+    }
+
+    const finalAllocations = type === 'prizepool'
+      ? [{ eventId: form.prizeEventId, quantity: '', amount: form.amount }]
+      : allocations;
+
     startTransition(async () => {
       const res = await addExpense({
-        festId, expenseType: type as any, ...form, allocations,
+        festId, expenseType: type as any, ...form, allocations: finalAllocations,
       });
       if (res?.error) setError(res.error);
       else {
         setMsg('Expense logged.');
-        setForm({ categoryId: '', vendorId: '', paidByVolunteer: '', reimbursed: false, itemName: '', quantity: '', rate: '', amount: '', expenseDate: new Date().toISOString().slice(0, 10), driveLink: '', notes: '' });
+        setForm(EMPTY_FORM);
         setAllocations([]);
         onDone();
       }
@@ -170,10 +203,15 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
 
   return (
     <div className="bg-white rounded-lg border border-border p-5 max-w-2xl">
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-4 flex-wrap">
         {EXPENSE_TYPES.map(t => (
           <button key={t.id} onClick={() => setType(t.id)}
-            className={`flex-1 py-2 rounded text-sm ${type === t.id ? 'bg-expenseSoft text-expense border border-expense' : 'border border-border text-inkSoft'}`}>
+            className="px-3 py-2 rounded text-sm"
+            style={{
+              background: type === t.id ? '#F5E4E0' : '#fff',
+              color: type === t.id ? '#A6412F' : '#5B6B8C',
+              border: `1px solid ${type === t.id ? '#A6412F' : '#DCE2ED'}`,
+            }}>
             {t.label}
           </button>
         ))}
@@ -188,24 +226,77 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
           </select>
         </div>
 
-        {type === 'vendor_purchase' ? (
-          <div className="mb-3">
-            <label className="field-label">Vendor</label>
-            <select value={form.vendorId} onChange={e => set('vendorId', e.target.value)}>
-              <option value="">Select vendor</option>
-              {vendors.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
-            </select>
-          </div>
-        ) : (
+        {type === 'vendor_purchase' && (
+          <>
+            <div className="mb-3">
+              <label className="field-label">Vendor</label>
+              <select value={form.vendorId} onChange={e => set('vendorId', e.target.value)}>
+                <option value="">Select vendor</option>
+                {vendors.map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
+              </select>
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Volunteer Involved in Procurement</label>
+              <input value={form.procuredByVolunteer} onChange={e => set('procuredByVolunteer', e.target.value)} placeholder="Who handled this purchase" />
+            </div>
+          </>
+        )}
+
+        {(type === 'volunteer_expense' || type === 'cab_travel' || type === 'personal_vehicle') && (
           <div className="mb-3">
             <label className="field-label">Paid By (Volunteer Name)</label>
             <input value={form.paidByVolunteer} onChange={e => set('paidByVolunteer', e.target.value)} />
           </div>
         )}
 
+        {type === 'cab_travel' && (
+          <>
+            <div className="mb-3">
+              <label className="field-label">Travel From</label>
+              <input value={form.travelFrom} onChange={e => set('travelFrom', e.target.value)} />
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Travel To</label>
+              <input value={form.travelTo} onChange={e => set('travelTo', e.target.value)} />
+            </div>
+          </>
+        )}
+
+        {type === 'personal_vehicle' && (
+          <div className="mb-3">
+            <label className="field-label">Vehicle Type</label>
+            <select value={form.vehicleType} onChange={e => set('vehicleType', e.target.value)}>
+              <option value="">Select</option>
+              <option value="2-Wheeler">2-Wheeler</option>
+              <option value="4-Wheeler">4-Wheeler</option>
+            </select>
+          </div>
+        )}
+
+        {type === 'prizepool' && (
+          <>
+            <div className="mb-3">
+              <label className="field-label">Event *</label>
+              <select value={form.prizeEventId} onChange={e => set('prizeEventId', e.target.value)}>
+                <option value="">Select event</option>
+                {events.map((ev: any) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+              </select>
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Position</label>
+              <input value={form.position} onChange={e => set('position', e.target.value)} placeholder="e.g. 1st, 2nd, Runner-up" />
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Winner Name</label>
+              <input value={form.winnerName} onChange={e => set('winnerName', e.target.value)} />
+            </div>
+          </>
+        )}
+
         <div className="mb-3">
-          <label className="field-label">Item / Description *</label>
-          <input value={form.itemName} onChange={e => set('itemName', e.target.value)} placeholder="e.g. A4 sheets, Auto fare to venue" />
+          <label className="field-label">{type === 'prizepool' ? 'Prize Description *' : 'Item / Description *'}</label>
+          <input value={form.itemName} onChange={e => set('itemName', e.target.value)}
+            placeholder={type === 'prizepool' ? 'e.g. Cash Prize, Trophy' : 'e.g. A4 sheets'} />
         </div>
 
         <div className="mb-3">
@@ -213,15 +304,29 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
           <input type="date" value={form.expenseDate} onChange={e => set('expenseDate', e.target.value)} />
         </div>
 
-        <div className="mb-3">
-          <label className="field-label">Quantity</label>
-          <input type="number" value={form.quantity} onChange={e => set('quantity', e.target.value)} />
-        </div>
-
-        <div className="mb-3">
-          <label className="field-label">Rate (per unit)</label>
-          <input type="number" value={form.rate} onChange={e => set('rate', e.target.value)} />
-        </div>
+        {type === 'personal_vehicle' ? (
+          <>
+            <div className="mb-3">
+              <label className="field-label">Total KMs</label>
+              <input type="number" value={form.quantity} onChange={e => updateKmOrRate('quantity', e.target.value)} />
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Rate per KM (₹)</label>
+              <input type="number" value={form.rate} onChange={e => updateKmOrRate('rate', e.target.value)} />
+            </div>
+          </>
+        ) : type === 'vendor_purchase' ? (
+          <>
+            <div className="mb-3">
+              <label className="field-label">Quantity</label>
+              <input type="number" value={form.quantity} onChange={e => set('quantity', e.target.value)} />
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Rate (per unit)</label>
+              <input type="number" value={form.rate} onChange={e => set('rate', e.target.value)} />
+            </div>
+          </>
+        ) : null}
 
         <div className="mb-3">
           <label className="field-label">Total Amount (₹) *</label>
@@ -229,12 +334,17 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
         </div>
 
         <div className="mb-3">
-          <label className="field-label">Drive Link (invoice/screenshot)</label>
-          <input value={form.driveLink} onChange={e => set('driveLink', e.target.value)} placeholder="https://drive.google.com/..." />
+          <label className="field-label">Invoice Link</label>
+          <input value={form.invoiceLink} onChange={e => set('invoiceLink', e.target.value)} placeholder="https://drive.google.com/..." />
+        </div>
+
+        <div className="mb-3">
+          <label className="field-label">Payment Screenshot Link</label>
+          <input value={form.paymentProofLink} onChange={e => set('paymentProofLink', e.target.value)} placeholder="https://drive.google.com/..." />
         </div>
       </div>
 
-      {type !== 'vendor_purchase' && (
+      {(type === 'volunteer_expense' || type === 'cab_travel' || type === 'personal_vehicle') && (
         <label className="flex items-center gap-2 text-sm mb-3">
           <input type="checkbox" className="!w-auto" checked={form.reimbursed} onChange={e => set('reimbursed', e.target.checked)} />
           Already reimbursed by Section
@@ -246,24 +356,26 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
         <textarea value={form.notes} onChange={e => set('notes', e.target.value)} style={{ minHeight: '50px' }} />
       </div>
 
-      <div className="mb-4 border-t border-border pt-3">
-        <div className="flex items-center justify-between mb-2">
-          <label className="field-label mb-0">Which event(s) used this? (optional)</label>
-          <button onClick={addAllocRow} className="text-xs text-gold">+ Split across event</button>
-        </div>
-        {allocations.map((row, i) => (
-          <div key={i} className="flex gap-2 mb-2 items-center">
-            <select value={row.eventId} onChange={e => updateAlloc(i, 'eventId', e.target.value)}>
-              <option value="">Select event</option>
-              {events.map((ev: any) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
-            </select>
-            <input type="number" placeholder="Qty" value={row.quantity} onChange={e => updateAlloc(i, 'quantity', e.target.value)} className="!w-24" />
-            <input type="number" placeholder="Amount ₹" value={row.amount} onChange={e => updateAlloc(i, 'amount', e.target.value)} className="!w-28" />
-            <button onClick={() => removeAlloc(i)} className="text-expense text-xs shrink-0">✕</button>
+      {type !== 'prizepool' && (
+        <div className="mb-4 border-t border-border pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <label className="field-label mb-0">Which event(s) used this? (optional)</label>
+            <button onClick={addAllocRow} className="text-xs text-gold">+ Split across event</button>
           </div>
-        ))}
-        {allocations.length === 0 && <p className="text-xs text-inkSoft">Leave blank if this was a bulk purchase not yet assigned to specific events.</p>}
-      </div>
+          {allocations.map((row, i) => (
+            <div key={i} className="flex gap-2 mb-2 items-center">
+              <select value={row.eventId} onChange={e => updateAlloc(i, 'eventId', e.target.value)}>
+                <option value="">Select event</option>
+                {events.map((ev: any) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+              </select>
+              <input type="number" placeholder="Qty" value={row.quantity} onChange={e => updateAlloc(i, 'quantity', e.target.value)} className="!w-24" />
+              <input type="number" placeholder="Amount ₹" value={row.amount} onChange={e => updateAlloc(i, 'amount', e.target.value)} className="!w-28" />
+              <button onClick={() => removeAlloc(i)} className="text-expense text-xs shrink-0">✕</button>
+            </div>
+          ))}
+          {allocations.length === 0 && <p className="text-xs text-inkSoft">Leave blank if this wasn't assigned to specific events.</p>}
+        </div>
+      )}
 
       {error && <div className="text-expense text-sm mb-2">{error}</div>}
       {msg && <div className="text-income text-sm mb-2">{msg}</div>}
@@ -304,7 +416,12 @@ function AddIncomeForm({ festId, events, categories, onDone }: any) {
       <div className="flex gap-2 mb-4">
         {[['registration', 'Registration'], ['sponsorship', 'Sponsorship'], ['other', 'Other']].map(([id, label]) => (
           <button key={id} onClick={() => setType(id)}
-            className={`flex-1 py-2 rounded text-sm ${type === id ? 'bg-incomeSoft text-income border border-income' : 'border border-border text-inkSoft'}`}>
+            className="flex-1 py-2 rounded text-sm"
+            style={{
+              background: type === id ? '#E1EFEA' : '#fff',
+              color: type === id ? '#276B5D' : '#5B6B8C',
+              border: `1px solid ${type === id ? '#276B5D' : '#DCE2ED'}`,
+            }}>
             {label}
           </button>
         ))}
@@ -367,6 +484,14 @@ function AddIncomeForm({ festId, events, categories, onDone }: any) {
   );
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  vendor_purchase: 'Vendor Purchase',
+  volunteer_expense: 'Volunteer Expenditure',
+  cab_travel: 'Cab Travel',
+  personal_vehicle: 'Personal Vehicle',
+  prizepool: 'Prizepool',
+};
+
 function EntriesList({ festId, expenses, income }: any) {
   const [view, setView] = useState<'expense' | 'income'>('expense');
   const [pending, startTransition] = useTransition();
@@ -383,19 +508,19 @@ function EntriesList({ festId, expenses, income }: any) {
   return (
     <div>
       <div className="flex gap-2 mb-3">
-        <button onClick={() => setView('expense')} className={`px-3 py-1 rounded text-sm ${view === 'expense' ? 'bg-expenseSoft text-expense' : 'text-inkSoft'}`}>Expenses ({expenses.length})</button>
-        <button onClick={() => setView('income')} className={`px-3 py-1 rounded text-sm ${view === 'income' ? 'bg-incomeSoft text-income' : 'text-inkSoft'}`}>Income ({income.length})</button>
+        <button onClick={() => setView('expense')} className="px-3 py-1 rounded text-sm" style={{ background: view === 'expense' ? '#F5E4E0' : 'transparent', color: view === 'expense' ? '#A6412F' : '#5B6B8C' }}>Expenses ({expenses.length})</button>
+        <button onClick={() => setView('income')} className="px-3 py-1 rounded text-sm" style={{ background: view === 'income' ? '#E1EFEA' : 'transparent', color: view === 'income' ? '#276B5D' : '#5B6B8C' }}>Income ({income.length})</button>
       </div>
 
       <div className="bg-white rounded-lg border border-border overflow-x-auto">
         {view === 'expense' ? (
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm min-w-[750px]">
             <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Vendor/Paid By</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2"></th></tr></thead>
             <tbody>
               {expenses.map((e: any) => (
                 <tr key={e.id} className="border-t border-border">
                   <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
-                  <td className="px-3 py-2 text-xs text-inkSoft">{e.expense_type.replace('_', ' ')}</td>
+                  <td className="px-3 py-2 text-xs text-inkSoft">{TYPE_LABELS[e.expense_type] || e.expense_type}</td>
                   <td className="px-3 py-2">{e.item_name}</td>
                   <td className="px-3 py-2 text-inkSoft">{e.vendors?.name || e.paid_by_volunteer || '—'}</td>
                   <td className="px-3 py-2 text-right font-mono text-expense font-semibold">{inr(e.amount)}</td>
@@ -428,35 +553,108 @@ function EntriesList({ festId, expenses, income }: any) {
 
 function ExportPanel({ fest, events, expenses, income, allocations }: any) {
   function exportExcel() {
-    const expenseRows = expenses.map((e: any) => ({
-      Date: e.expense_date, Type: e.expense_type, Category: e.categories?.name || '',
-      Item: e.item_name, Quantity: e.quantity, Rate: e.rate, Amount: Number(e.amount),
-      Vendor: e.vendors?.name || '', 'Paid By (Volunteer)': e.paid_by_volunteer || '',
-      Reimbursed: e.reimbursed ? 'Yes' : 'No', 'Drive Link': e.drive_link || '', Notes: e.notes || '',
-    }));
-    const incomeRows = income.map((i: any) => ({
-      Date: i.income_date, Type: i.income_type, Event: events.find((e: any) => e.id === i.event_id)?.name || '',
-      Category: i.categories?.name || '', Registrations: i.registrations_count, Amount: Number(i.amount),
-      Source: i.source_name || '', 'Drive Link': i.drive_link || '', Notes: i.notes || '',
-    }));
-    const totalExpense = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
+    const wb = XLSX.utils.book_new();
+    const eventName = (id: string) => events.find((e: any) => e.id === id)?.name || '';
+
+    // ---- Summary sheet ----
     const totalIncome = income.reduce((s: number, i: any) => s + Number(i.amount), 0);
-    const summaryRows = [
+    const totalExpense = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
       { Metric: 'Total Income', Value: totalIncome },
       { Metric: 'Total Expense', Value: totalExpense },
       { Metric: 'Net Balance', Value: totalIncome - totalExpense },
-    ];
+    ]), 'Summary');
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Summary');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseRows), 'Expenses');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incomeRows), 'Income');
+    // ---- One sheet per category, for vendor purchases (Stationery, Printing, Food, etc.) ----
+    const vendorPurchases = expenses.filter((e: any) => e.expense_type === 'vendor_purchase');
+    const categoryGroups: Record<string, any[]> = {};
+    vendorPurchases.forEach((e: any) => {
+      const cat = e.categories?.name || 'Uncategorized';
+      (categoryGroups[cat] ||= []).push(e);
+    });
+    Object.entries(categoryGroups).forEach(([cat, rows]) => {
+      const sheetRows = rows.map((e, i) => ({
+        'Sr No.': i + 1, Vendor: e.vendors?.name || '', Item: e.item_name, Qty: e.quantity, 'Unit Price': e.rate,
+        'Total Amount': Number(e.amount), 'Procured By': e.procured_by_volunteer || '', Date: e.expense_date,
+        'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '', Notes: e.notes || '',
+      }));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheetRows), sheetName(cat));
+    });
+
+    // ---- Volunteer Expenditure ----
+    const volunteerRows = expenses.filter((e: any) => e.expense_type === 'volunteer_expense').map((e: any, i: number) => ({
+      'Sr No.': i + 1, Item: e.item_name, Amount: Number(e.amount), 'Paid By': e.paid_by_volunteer || '',
+      Reimbursed: e.reimbursed ? 'Yes' : 'No', Date: e.expense_date,
+      'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '', Notes: e.notes || '',
+    }));
+    if (volunteerRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(volunteerRows), 'Volunteer Expenditure');
+
+    // ---- Cab Travel ----
+    const cabRows = expenses.filter((e: any) => e.expense_type === 'cab_travel').map((e: any, i: number) => ({
+      'Sr No.': i + 1, 'Paid By': e.paid_by_volunteer || '', Date: e.expense_date, From: e.travel_from || '', To: e.travel_to || '',
+      Amount: Number(e.amount), Reimbursed: e.reimbursed ? 'Yes' : 'No',
+      'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '',
+    }));
+    if (cabRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cabRows), 'Cab Travel');
+
+    // ---- Personal Vehicle ----
+    const vehicleRows = expenses.filter((e: any) => e.expense_type === 'personal_vehicle').map((e: any, i: number) => ({
+      'Sr No.': i + 1, 'Paid By': e.paid_by_volunteer || '', 'Vehicle Type': e.vehicle_type || '',
+      'Total KM': e.quantity, 'Rate/KM': e.rate, Amount: Number(e.amount), Reimbursed: e.reimbursed ? 'Yes' : 'No', Date: e.expense_date,
+    }));
+    if (vehicleRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vehicleRows), 'Personal Vehicle');
+
+    // ---- Prizepool ----
+    const prizeRows = expenses.filter((e: any) => e.expense_type === 'prizepool').map((e: any, i: number) => {
+      const alloc = allocations.find((a: any) => a.expense_id === e.id);
+      return {
+        'Sr No.': i + 1, Event: alloc ? eventName(alloc.event_id) : '', Prize: e.item_name,
+        Position: e.position || '', Winner: e.winner_name || '', Amount: Number(e.amount), Date: e.expense_date,
+        'Payment Proof Link': e.payment_proof_link || '',
+      };
+    });
+    if (prizeRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(prizeRows), 'Prizepool');
+
+    // ---- Income: daily detail ----
+    const incomeRows = income.map((i: any) => ({
+      Date: i.income_date, Type: i.income_type, Event: eventName(i.event_id),
+      Category: i.categories?.name || '', Registrations: i.registrations_count, Amount: Number(i.amount),
+      Source: i.source_name || '', 'Drive Link': i.drive_link || '', Notes: i.notes || '',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incomeRows), 'Income (Daily)');
+
+    // ---- Income: summary per event (matches the final-total format) ----
+    const regByEvent: Record<string, { registrations: number; amount: number; lastDate: string }> = {};
+    income.filter((i: any) => i.income_type === 'registration').forEach((i: any) => {
+      const key = eventName(i.event_id) || 'Unknown Event';
+      const cur = regByEvent[key] || { registrations: 0, amount: 0, lastDate: '' };
+      cur.registrations += Number(i.registrations_count || 0);
+      cur.amount += Number(i.amount);
+      if (!cur.lastDate || i.income_date > cur.lastDate) cur.lastDate = i.income_date;
+      regByEvent[key] = cur;
+    });
+    const summaryRows = [
+      ...Object.entries(regByEvent).map(([event, v]) => ({
+        Type: 'Registration', 'Event / Source': event, 'Total Registrations': v.registrations,
+        'Total Amount': v.amount, 'Final Date Received': v.lastDate,
+      })),
+      ...income.filter((i: any) => i.income_type === 'sponsorship').map((i: any) => ({
+        Type: 'Sponsorship', 'Event / Source': i.source_name || '', 'Total Registrations': '',
+        'Total Amount': Number(i.amount), 'Final Date Received': i.income_date,
+      })),
+      ...income.filter((i: any) => i.income_type === 'other').map((i: any) => ({
+        Type: 'Other', 'Event / Source': i.categories?.name || i.source_name || '', 'Total Registrations': '',
+        'Total Amount': Number(i.amount), 'Final Date Received': i.income_date,
+      })),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), 'Income Summary');
+
     XLSX.writeFile(wb, `${fest.name.replace(/\s+/g, '_')}_Report.xlsx`);
   }
 
   return (
     <div className="bg-white rounded-lg border border-border p-5 max-w-md">
-      <p className="text-sm text-inkSoft mb-4">Downloads one Excel file for this fest: a Summary sheet plus full Expenses and Income sheets, including Drive links to every proof.</p>
+      <p className="text-sm text-inkSoft mb-4">Downloads one Excel file: a Summary, one sheet per expense category (Stationery, Food, etc.), dedicated sheets for Volunteer Expenditure / Cab Travel / Personal Vehicle / Prizepool, and both a daily Income log and a per-event Income Summary.</p>
       <button onClick={exportExcel} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">Download Excel Report</button>
     </div>
   );

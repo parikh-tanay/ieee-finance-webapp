@@ -14,9 +14,10 @@ type Allocation = { eventId: string; quantity: string; amount: string };
 
 export async function addExpense(payload: {
   festId: string;
-  expenseType: 'vendor_purchase' | 'volunteer_expense' | 'conveyance';
+  expenseType: 'vendor_purchase' | 'volunteer_expense' | 'cab_travel' | 'personal_vehicle' | 'prizepool';
   categoryId: string;
   vendorId: string;
+  procuredByVolunteer: string;
   paidByVolunteer: string;
   reimbursed: boolean;
   itemName: string;
@@ -24,7 +25,13 @@ export async function addExpense(payload: {
   rate: string;
   amount: string;
   expenseDate: string;
-  driveLink: string;
+  travelFrom: string;
+  travelTo: string;
+  vehicleType: string;
+  position: string;
+  winnerName: string;
+  invoiceLink: string;
+  paymentProofLink: string;
   notes: string;
   allocations: Allocation[];
 }) {
@@ -34,19 +41,28 @@ export async function addExpense(payload: {
     return { error: 'Item name and a valid amount are required.' };
   }
 
+  const isVolunteerFronted = payload.expenseType === 'volunteer_expense' || payload.expenseType === 'cab_travel' || payload.expenseType === 'personal_vehicle';
+
   const { data: expense, error } = await supabase.from('expenses').insert({
     fest_id: payload.festId,
     category_id: payload.categoryId || null,
     expense_type: payload.expenseType,
     vendor_id: payload.expenseType === 'vendor_purchase' ? (payload.vendorId || null) : null,
-    paid_by_volunteer: payload.expenseType !== 'vendor_purchase' ? (payload.paidByVolunteer || null) : null,
-    reimbursed: payload.reimbursed,
+    procured_by_volunteer: payload.expenseType === 'vendor_purchase' ? (payload.procuredByVolunteer || null) : null,
+    paid_by_volunteer: isVolunteerFronted ? (payload.paidByVolunteer || null) : null,
+    reimbursed: isVolunteerFronted ? payload.reimbursed : false,
     item_name: payload.itemName.trim(),
     quantity: payload.quantity ? Number(payload.quantity) : null,
     rate: payload.rate ? Number(payload.rate) : null,
     amount: Number(payload.amount),
     expense_date: payload.expenseDate,
-    drive_link: payload.driveLink || null,
+    travel_from: payload.expenseType === 'cab_travel' ? (payload.travelFrom || null) : null,
+    travel_to: payload.expenseType === 'cab_travel' ? (payload.travelTo || null) : null,
+    vehicle_type: payload.expenseType === 'personal_vehicle' ? (payload.vehicleType || null) : null,
+    position: payload.expenseType === 'prizepool' ? (payload.position || null) : null,
+    winner_name: payload.expenseType === 'prizepool' ? (payload.winnerName || null) : null,
+    invoice_link: payload.invoiceLink || null,
+    payment_proof_link: payload.paymentProofLink || null,
     notes: payload.notes || null,
     created_by: user.id,
   }).select().single();
