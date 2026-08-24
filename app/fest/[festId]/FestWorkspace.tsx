@@ -244,7 +244,7 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
 
         {(type === 'volunteer_expense' || type === 'cab_travel' || type === 'personal_vehicle') && (
           <div className="mb-3">
-            <label className="field-label">Paid By (Volunteer Name)</label>
+            <label className="field-label">Volunteer Name</label>
             <input value={form.paidByVolunteer} onChange={e => set('paidByVolunteer', e.target.value)} />
           </div>
         )}
