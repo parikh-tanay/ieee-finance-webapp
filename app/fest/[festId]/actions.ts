@@ -19,9 +19,9 @@ export async function addExpense(payload: {
   vendorId: string;
   procuredByVolunteer: string;
   paidByVolunteer: string;
-  reimbursed: boolean;
   itemName: string;
   quantity: string;
+  unit: string;
   rate: string;
   amount: string;
   expenseDate: string;
@@ -45,14 +45,14 @@ export async function addExpense(payload: {
 
   const { data: expense, error } = await supabase.from('expenses').insert({
     fest_id: payload.festId,
-    category_id: payload.categoryId || null,
+    category_id: payload.expenseType === 'vendor_purchase' ? (payload.categoryId || null) : null,
     expense_type: payload.expenseType,
     vendor_id: payload.expenseType === 'vendor_purchase' ? (payload.vendorId || null) : null,
     procured_by_volunteer: payload.expenseType === 'vendor_purchase' ? (payload.procuredByVolunteer || null) : null,
     paid_by_volunteer: isVolunteerFronted ? (payload.paidByVolunteer || null) : null,
-    reimbursed: isVolunteerFronted ? payload.reimbursed : false,
     item_name: payload.itemName.trim(),
     quantity: payload.quantity ? Number(payload.quantity) : null,
+    unit: payload.expenseType === 'vendor_purchase' ? (payload.unit || null) : null,
     rate: payload.rate ? Number(payload.rate) : null,
     amount: Number(payload.amount),
     expense_date: payload.expenseDate,

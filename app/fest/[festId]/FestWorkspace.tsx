@@ -12,8 +12,8 @@ function sheetName(name: string) {
 }
 
 const EMPTY_FORM = {
-  categoryId: '', vendorId: '', procuredByVolunteer: '', paidByVolunteer: '', reimbursed: false,
-  itemName: '', quantity: '', rate: '', amount: '', expenseDate: new Date().toISOString().slice(0, 10),
+  categoryId: '', vendorId: '', procuredByVolunteer: '', paidByVolunteer: '',
+  itemName: '', quantity: '', unit: '', rate: '', amount: '', expenseDate: new Date().toISOString().slice(0, 10),
   travelFrom: '', travelTo: '', vehicleType: '', position: '', winnerName: '', prizeEventId: '',
   invoiceLink: '', paymentProofLink: '', notes: '',
 };
@@ -47,11 +47,7 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
       byEventIncome[key] = (byEventIncome[key] || 0) + Number(i.amount);
     });
 
-    const volunteerOwed = expenses
-      .filter((e: any) => ['volunteer_expense', 'cab_travel', 'personal_vehicle'].includes(e.expense_type) && !e.reimbursed)
-      .reduce((s: number, e: any) => s + Number(e.amount), 0);
-
-    return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome, volunteerOwed };
+    return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome };
   }, [expenses, income, allocations, events]);
 
   return (
@@ -126,9 +122,9 @@ function Overview({ totals }: any) {
         <StatCard label="Total Expense" value={totals.totalExpense} tone="expense" />
         <StatCard label="Net" value={totals.net} tone={totals.net >= 0 ? 'income' : 'expense'} />
       </div>
-      {totals.volunteerOwed > 0 && (
-        <div className="rounded-lg px-4 py-3 text-sm mb-5" style={{ background: '#F3E7CC', border: '1px solid #B8892B' }}>
-          <strong>{inr(totals.volunteerOwed)}</strong> in volunteer expenses / cab / personal vehicle is still marked <em>not reimbursed</em> by Section.
+      {totals.net < 0 && (
+        <div className="rounded-lg px-4 py-3 text-sm mb-5" style={{ background: '#F5E4E0', color: '#A6412F', border: '1px solid #A6412F' }}>
+          Expenses currently exceed income for this fest by {inr(Math.abs(totals.net))}.
         </div>
       )}
       <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -164,13 +160,15 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
   }
   function removeAlloc(i: number) { setAllocations(a => a.filter((_, idx) => idx !== i)); }
 
-  // Personal vehicle: auto-calculate amount from km × rate, still overridable.
-  function updateKmOrRate(field: 'quantity' | 'rate', val: string) {
+  // Auto-calculate amount from quantity × rate, whenever both are present —
+  // still fully overridable, so bulk purchases (only a final total known)
+  // just skip quantity/rate and type the amount directly.
+  function updateQtyOrRate(field: 'quantity' | 'rate', val: string) {
     setForm(f => {
       const next = { ...f, [field]: val };
-      const km = Number(field === 'quantity' ? val : f.quantity);
+      const qty = Number(field === 'quantity' ? val : f.quantity);
       const rate = Number(field === 'rate' ? val : f.rate);
-      if (km > 0 && rate > 0) next.amount = String(km * rate);
+      if (qty > 0 && rate > 0) next.amount = String(qty * rate);
       return next;
     });
   }
@@ -218,13 +216,15 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
       </div>
 
       <div className="grid md:grid-cols-2 gap-x-4">
-        <div className="mb-3">
-          <label className="field-label">Category *</label>
-          <select value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
-            <option value="">Select category</option>
-            {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
+        {type === 'vendor_purchase' && (
+          <div className="mb-3">
+            <label className="field-label">Category *</label>
+            <select value={form.categoryId} onChange={e => set('categoryId', e.target.value)}>
+              <option value="">Select category</option>
+              {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        )}
 
         {type === 'vendor_purchase' && (
           <>
@@ -308,22 +308,26 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
           <>
             <div className="mb-3">
               <label className="field-label">Total KMs</label>
-              <input type="number" value={form.quantity} onChange={e => updateKmOrRate('quantity', e.target.value)} />
+              <input type="number" value={form.quantity} onChange={e => updateQtyOrRate('quantity', e.target.value)} />
             </div>
             <div className="mb-3">
               <label className="field-label">Rate per KM (₹)</label>
-              <input type="number" value={form.rate} onChange={e => updateKmOrRate('rate', e.target.value)} />
+              <input type="number" value={form.rate} onChange={e => updateQtyOrRate('rate', e.target.value)} />
             </div>
           </>
         ) : type === 'vendor_purchase' ? (
           <>
             <div className="mb-3">
               <label className="field-label">Quantity</label>
-              <input type="number" value={form.quantity} onChange={e => set('quantity', e.target.value)} />
+              <input type="number" value={form.quantity} onChange={e => updateQtyOrRate('quantity', e.target.value)} placeholder="Leave blank for bulk/lump-sum" />
+            </div>
+            <div className="mb-3">
+              <label className="field-label">Unit</label>
+              <input value={form.unit} onChange={e => set('unit', e.target.value)} placeholder="e.g. pcs, gms, kg, packets" />
             </div>
             <div className="mb-3">
               <label className="field-label">Rate (per unit)</label>
-              <input type="number" value={form.rate} onChange={e => set('rate', e.target.value)} />
+              <input type="number" value={form.rate} onChange={e => updateQtyOrRate('rate', e.target.value)} placeholder="Leave blank for bulk/lump-sum" />
             </div>
           </>
         ) : null}
@@ -331,6 +335,7 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
         <div className="mb-3">
           <label className="field-label">Total Amount (₹) *</label>
           <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)} />
+          {type === 'vendor_purchase' && <p className="text-xs text-inkSoft mt-1">Auto-fills from Quantity × Rate when both are set — edit freely for bulk/lump-sum purchases.</p>}
         </div>
 
         <div className="mb-3">
@@ -343,13 +348,6 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
           <input value={form.paymentProofLink} onChange={e => set('paymentProofLink', e.target.value)} placeholder="https://drive.google.com/..." />
         </div>
       </div>
-
-      {(type === 'volunteer_expense' || type === 'cab_travel' || type === 'personal_vehicle') && (
-        <label className="flex items-center gap-2 text-sm mb-3">
-          <input type="checkbox" className="!w-auto" checked={form.reimbursed} onChange={e => set('reimbursed', e.target.checked)} />
-          Already reimbursed by Section
-        </label>
-      )}
 
       <div className="mb-3">
         <label className="field-label">Notes</label>
@@ -574,7 +572,7 @@ function ExportPanel({ fest, events, expenses, income, allocations }: any) {
     });
     Object.entries(categoryGroups).forEach(([cat, rows]) => {
       const sheetRows = rows.map((e, i) => ({
-        'Sr No.': i + 1, Vendor: e.vendors?.name || '', Item: e.item_name, Qty: e.quantity, 'Unit Price': e.rate,
+        'Sr No.': i + 1, Vendor: e.vendors?.name || '', Item: e.item_name, Qty: e.quantity, Unit: e.unit || '', 'Unit Price': e.rate,
         'Total Amount': Number(e.amount), 'Procured By': e.procured_by_volunteer || '', Date: e.expense_date,
         'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '', Notes: e.notes || '',
       }));
@@ -584,23 +582,21 @@ function ExportPanel({ fest, events, expenses, income, allocations }: any) {
     // ---- Volunteer Expenditure ----
     const volunteerRows = expenses.filter((e: any) => e.expense_type === 'volunteer_expense').map((e: any, i: number) => ({
       'Sr No.': i + 1, Item: e.item_name, Amount: Number(e.amount), 'Paid By': e.paid_by_volunteer || '',
-      Reimbursed: e.reimbursed ? 'Yes' : 'No', Date: e.expense_date,
-      'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '', Notes: e.notes || '',
+      Date: e.expense_date, 'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '', Notes: e.notes || '',
     }));
     if (volunteerRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(volunteerRows), 'Volunteer Expenditure');
 
     // ---- Cab Travel ----
     const cabRows = expenses.filter((e: any) => e.expense_type === 'cab_travel').map((e: any, i: number) => ({
       'Sr No.': i + 1, 'Paid By': e.paid_by_volunteer || '', Date: e.expense_date, From: e.travel_from || '', To: e.travel_to || '',
-      Amount: Number(e.amount), Reimbursed: e.reimbursed ? 'Yes' : 'No',
-      'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '',
+      Amount: Number(e.amount), 'Invoice Link': e.invoice_link || '', 'Payment Proof Link': e.payment_proof_link || '',
     }));
     if (cabRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cabRows), 'Cab Travel');
 
     // ---- Personal Vehicle ----
     const vehicleRows = expenses.filter((e: any) => e.expense_type === 'personal_vehicle').map((e: any, i: number) => ({
       'Sr No.': i + 1, 'Paid By': e.paid_by_volunteer || '', 'Vehicle Type': e.vehicle_type || '',
-      'Total KM': e.quantity, 'Rate/KM': e.rate, Amount: Number(e.amount), Reimbursed: e.reimbursed ? 'Yes' : 'No', Date: e.expense_date,
+      'Total KM': e.quantity, 'Rate/KM': e.rate, Amount: Number(e.amount), Date: e.expense_date,
     }));
     if (vehicleRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(vehicleRows), 'Personal Vehicle');
 
