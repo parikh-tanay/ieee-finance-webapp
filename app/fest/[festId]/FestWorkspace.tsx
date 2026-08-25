@@ -3,6 +3,7 @@
 import { useState, useMemo, useTransition } from 'react';
 import * as XLSX from 'xlsx';
 import { addExpense, addIncome, deleteExpense, deleteIncome } from './actions';
+import { safeExternalUrl } from '@/lib/safeUrl';
 
 function inr(n: number) { return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
@@ -244,7 +245,7 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
 
         {(type === 'volunteer_expense' || type === 'cab_travel' || type === 'personal_vehicle') && (
           <div className="mb-3">
-            <label className="field-label">Volunteer Name</label>
+            <label className="field-label">Paid By (Volunteer Name)</label>
             <input value={form.paidByVolunteer} onChange={e => set('paidByVolunteer', e.target.value)} />
           </div>
         )}
@@ -490,6 +491,16 @@ const TYPE_LABELS: Record<string, string> = {
   prizepool: 'Prizepool',
 };
 
+function ProofLink({ url, label }: { url: string | null | undefined; label: string }) {
+  const safe = safeExternalUrl(url);
+  if (!safe) return <span className="text-inkSoft">—</span>;
+  return (
+    <a href={safe} target="_blank" rel="noopener noreferrer" className="text-gold">
+      {label}
+    </a>
+  );
+}
+
 function EntriesList({ festId, expenses, income }: any) {
   const [view, setView] = useState<'expense' | 'income'>('expense');
   const [pending, startTransition] = useTransition();
@@ -512,8 +523,8 @@ function EntriesList({ festId, expenses, income }: any) {
 
       <div className="bg-white rounded-lg border border-border overflow-x-auto">
         {view === 'expense' ? (
-          <table className="w-full text-sm min-w-[750px]">
-            <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Vendor/Paid By</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2"></th></tr></thead>
+          <table className="w-full text-sm min-w-[850px]">
+            <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Vendor/Paid By</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-left">Proof</th><th className="px-3 py-2"></th></tr></thead>
             <tbody>
               {expenses.map((e: any) => (
                 <tr key={e.id} className="border-t border-border">
@@ -522,14 +533,19 @@ function EntriesList({ festId, expenses, income }: any) {
                   <td className="px-3 py-2">{e.item_name}</td>
                   <td className="px-3 py-2 text-inkSoft">{e.vendors?.name || e.paid_by_volunteer || '—'}</td>
                   <td className="px-3 py-2 text-right font-mono text-expense font-semibold">{inr(e.amount)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <ProofLink url={e.invoice_link} label="Invoice" />
+                    {e.payment_proof_link && <span className="text-inkSoft"> · </span>}
+                    <ProofLink url={e.payment_proof_link} label="Payment" />
+                  </td>
                   <td className="px-3 py-2"><button onClick={() => removeExpense(e.id)} className="text-expense text-xs">Delete</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
-          <table className="w-full text-sm min-w-[700px]">
-            <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Source</th><th className="px-3 py-2 text-right">Registrations</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2"></th></tr></thead>
+          <table className="w-full text-sm min-w-[750px]">
+            <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Source</th><th className="px-3 py-2 text-right">Registrations</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-left">Proof</th><th className="px-3 py-2"></th></tr></thead>
             <tbody>
               {income.map((i: any) => (
                 <tr key={i.id} className="border-t border-border">
@@ -538,6 +554,7 @@ function EntriesList({ festId, expenses, income }: any) {
                   <td className="px-3 py-2">{i.source_name || '—'}</td>
                   <td className="px-3 py-2 text-right">{i.registrations_count ?? '—'}</td>
                   <td className="px-3 py-2 text-right font-mono text-income font-semibold">{inr(i.amount)}</td>
+                  <td className="px-3 py-2"><ProofLink url={i.drive_link} label="View" /></td>
                   <td className="px-3 py-2"><button onClick={() => removeIncome(i.id)} className="text-expense text-xs">Delete</button></td>
                 </tr>
               ))}
