@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 
 // How long the app tolerates zero activity before forcing a re-login.
 // Change just this one number to adjust the timeout everywhere.
-const IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1000; // 4 hours
+const IDLE_TIMEOUT_MS = 30 * 1000; // n * 60 * 60 * 1000 miliseconds
 
 // How often to check whether the idle limit has been crossed.
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
