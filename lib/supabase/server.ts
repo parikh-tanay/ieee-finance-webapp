@@ -12,7 +12,6 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
-      cookieOptions: { maxAge: 60 * 60 * 12 },
       cookies: {
         get(name: string) {
           return cookieStore.get(name)?.value;

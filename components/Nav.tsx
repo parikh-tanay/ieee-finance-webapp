@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import LogoutButton from './LogoutButton';
+import IdleTimeoutGuard from './IdleTimeoutGuard';
 
 export default async function Nav() {
   const supabase = await createClient();
@@ -13,6 +14,7 @@ export default async function Nav() {
 
   return (
     <div className="flex items-center justify-between mb-6 pb-4 border-b border-border">
+      <IdleTimeoutGuard />
       <div className="flex items-center gap-4">
         <Link href="/" className="font-display text-navy">IEEE SB Ledger</Link>
         <Link href="/account" className="text-sm text-inkSoft">My Account</Link>
