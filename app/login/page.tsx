@@ -44,8 +44,9 @@ export default function LoginPage() {
             className="w-full py-2 rounded bg-navy text-white text-sm font-medium">
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
-          <p className="text-xs text-inkSoft mt-4 text-center">
-            No account? Ask your Admin or Master to create one for you.
+            <p className="text-xs text-inkSoft mt-4 text-center">
+            No account? Ask your Admin or Master to create one for you.<br />
+            Forgot your password? Ask your Master to reset it from the Master page.
           </p>
         </div>
       </div>
