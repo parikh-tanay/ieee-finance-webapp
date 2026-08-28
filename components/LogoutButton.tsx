@@ -8,6 +8,7 @@ export default function LogoutButton() {
   async function logout() {
     const supabase = createClient();
     await supabase.auth.signOut();
+    localStorage.removeItem('ieee_login_time');
     router.push('/login');
     router.refresh();
   }

@@ -21,6 +21,7 @@ export default function LoginPage() {
       setError('Incorrect email or password.');
       return;
     }
+    localStorage.setItem('ieee_login_time', String(Date.now()));
     router.push('/');
     router.refresh();
   }
@@ -44,8 +45,7 @@ export default function LoginPage() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
           <p className="text-xs text-inkSoft mt-4 text-center">
-            No account? Ask your Admin or Master to create one for you.<br />
-            Forgot your password? Ask your Master to reset it from the Master page.
+            No account? Ask your Admin or Master to create one for you.
           </p>
         </div>
       </div>
