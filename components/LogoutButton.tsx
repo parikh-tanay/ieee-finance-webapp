@@ -12,5 +12,5 @@ export default function LogoutButton() {
     router.push('/login');
     router.refresh();
   }
-  return <button onClick={logout} className="text-xs text-inkSoft">Sign out</button>;
+  return <button onClick={logout} className="text-xs text-inkSoft hover:text-expense transition px-3 py-1.5 rounded-full border border-border hover:border-expense/40">Sign out</button>;
 }

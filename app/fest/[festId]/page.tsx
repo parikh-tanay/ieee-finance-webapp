@@ -9,13 +9,14 @@ export default async function FestPage({ params }: { params: Promise<{ festId: s
   const { data: fest } = await supabase.from('fests').select('*').eq('id', festId).single();
   if (!fest) notFound();
 
-  const [{ data: events }, { data: vendors }, { data: categories }, { data: expenses }, { data: income }, { data: allocations }] = await Promise.all([
+  const [{ data: events }, { data: vendors }, { data: categories }, { data: expenses }, { data: income }, { data: allocations }, { data: profiles }] = await Promise.all([
     supabase.from('events').select('*').eq('fest_id', festId).order('name'),
     supabase.from('vendors').select('*').order('name'),
     supabase.from('categories').select('*').order('name'),
     supabase.from('expenses').select('*, vendors(name), categories(name)').eq('fest_id', festId).order('expense_date', { ascending: false }),
     supabase.from('income_entries').select('*, categories(name)').eq('fest_id', festId).order('income_date', { ascending: false }),
     supabase.from('expense_allocations').select('*'),
+    supabase.from('profiles').select('id, full_name'),
   ]);
 
   return (
@@ -29,6 +30,7 @@ export default async function FestPage({ params }: { params: Promise<{ festId: s
         expenses={expenses || []}
         income={income || []}
         allocations={allocations || []}
+        profiles={profiles || []}
       />
     </div>
   );

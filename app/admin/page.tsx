@@ -14,7 +14,7 @@ export default async function AdminPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <Nav />
-      <h1 className="font-display text-2xl mb-1">Admin</h1>
+      <h1 className="font-display font-bold text-2xl tracking-wide mb-1">ADMIN</h1>
       <p className="text-inkSoft text-sm mb-6">Create fests and their events, manage vendors, and define expense/income categories.</p>
       <AdminPanels
         fests={fests || []}

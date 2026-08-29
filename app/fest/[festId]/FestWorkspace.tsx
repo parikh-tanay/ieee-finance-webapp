@@ -4,6 +4,7 @@ import { useState, useMemo, useTransition } from 'react';
 import * as XLSX from 'xlsx';
 import { addExpense, addIncome, deleteExpense, deleteIncome } from './actions';
 import { safeExternalUrl } from '@/lib/safeUrl';
+import { AnimatedNumber, StatusDot } from '@/components/Meter';
 
 function inr(n: number) { return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
@@ -19,7 +20,7 @@ const EMPTY_FORM = {
   invoiceLink: '', paymentProofLink: '', notes: '',
 };
 
-export default function FestWorkspace({ fest, events, vendors, categories, expenses, income, allocations }: any) {
+export default function FestWorkspace({ fest, events, vendors, categories, expenses, income, allocations, profiles }: any) {
   const [tab, setTab] = useState('overview');
   const expenseCategories = categories.filter((c: any) => c.kind === 'expense');
   const incomeCategories = categories.filter((c: any) => c.kind === 'income');
@@ -48,14 +49,31 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
       byEventIncome[key] = (byEventIncome[key] || 0) + Number(i.amount);
     });
 
-    return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome };
-  }, [expenses, income, allocations, events]);
+    // Leaderboard: who's logged the most entries (expenses + income combined)
+    // for this fest — friendly competition, purely a count of activity.
+    const nameById: Record<string, string> = {};
+    (profiles || []).forEach((p: any) => { nameById[p.id] = p.full_name; });
+    const entryCounts: Record<string, number> = {};
+    [...expenses, ...income].forEach((e: any) => {
+      if (!e.created_by) return;
+      entryCounts[e.created_by] = (entryCounts[e.created_by] || 0) + 1;
+    });
+    const leaderboard = Object.entries(entryCounts)
+      .map(([id, count]) => ({ name: nameById[id] || 'Unknown', count: count as number }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome, leaderboard };
+  }, [expenses, income, allocations, events, profiles]);
 
   return (
     <div>
-      <div className="mb-5">
-        <h1 className="font-display text-2xl">{fest.name}</h1>
-        <span className="text-xs text-inkSoft uppercase tracking-wide">{fest.status}</span>
+      <div className="mb-5 flex items-center gap-2">
+        <StatusDot color={fest.status === 'active' ? '#4ADE80' : '#8B90A0'} live={fest.status === 'active'} />
+        <div>
+          <h1 className="font-display font-bold text-2xl tracking-wide">{fest.name}</h1>
+          <span className="text-xs text-inkSoft uppercase tracking-widest font-mono">{fest.status}</span>
+        </div>
       </div>
 
       <div className="flex gap-2 mb-5 flex-wrap">
@@ -67,7 +85,10 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
           ['export', 'Export'],
         ].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
-            className={`px-3 py-1.5 rounded text-sm ${tab === id ? 'bg-navy text-white' : 'bg-white border border-border text-inkSoft'}`}>
+            className="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            style={tab === id
+              ? { background: '#E8A33D', color: '#12151B' }
+              : { background: '#1A1E27', color: '#8B90A0', border: '1px solid #2B3142' }}>
             {label}
           </button>
         ))}
@@ -88,13 +109,16 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
 }
 
 function StatCard({ label, value, tone }: { label: string; value: number; tone: 'income' | 'expense' | 'neutral' }) {
-  const color = tone === 'income' ? 'text-income' : tone === 'expense' ? 'text-expense' : 'text-ink';
+  const color = tone === 'income' ? '#4ADE80' : tone === 'expense' ? '#F87171' : '#EDEDEF';
   return (
-    <div className="rounded-lg p-4 flex-1" style={{ background: '#fff', border: '1px solid #DCE2ED' }}>
-      <div className="flex items-center gap-2 mb-2 text-inkSoft" style={{ fontSize: '0.78rem', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+    <div className="rounded-xl p-4 flex-1 meter-in" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
+      <div className="flex items-center gap-2 mb-2" style={{ fontSize: '0.72rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#8B90A0' }}>
+        <StatusDot color={color} live />
         {label}
       </div>
-      <div className={`font-mono text-2xl font-semibold ${color}`}>{inr(value)}</div>
+      <div className="font-mono text-2xl font-semibold" style={{ color }}>
+        <AnimatedNumber value={value} format={inr} />
+      </div>
     </div>
   );
 }
@@ -102,13 +126,35 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
 function BreakdownCard({ title, data }: { title: string; data: Record<string, number> }) {
   const rows = Object.entries(data).sort((a, b) => b[1] - a[1]);
   return (
-    <div className="bg-white rounded-lg border border-border">
-      <div className="px-4 py-2.5 font-display border-b border-border">{title}</div>
+    <div className="rounded-xl" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
+      <div className="px-4 py-2.5 font-display font-semibold tracking-wide" style={{ borderBottom: '1px solid #2B3142' }}>{title}</div>
       {rows.length === 0 ? (
         <div className="px-4 py-3 text-sm text-inkSoft">No data yet.</div>
       ) : rows.map(([k, v]) => (
-        <div key={k} className="px-4 py-2 flex justify-between text-sm border-t border-border first:border-t-0">
-          <span>{k}</span><span className="font-mono">{inr(v)}</span>
+        <div key={k} className="px-4 py-2 flex justify-between text-sm" style={{ borderTop: '1px solid #2B3142' }}>
+          <span>{k}</span><span className="font-mono tabular-nums">{inr(v)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Leaderboard({ data }: { data: { name: string; count: number }[] }) {
+  const medals = ['#E8A33D', '#C0C4CC', '#B87333']; // gold copper / silver / bronze
+  return (
+    <div className="rounded-xl" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
+      <div className="px-4 py-2.5 font-display font-semibold tracking-wide flex items-center gap-2" style={{ borderBottom: '1px solid #2B3142' }}>
+        🏆 Top Loggers This Fest
+      </div>
+      {data.length === 0 ? (
+        <div className="px-4 py-3 text-sm text-inkSoft">No entries logged yet — first one gets the top spot.</div>
+      ) : data.map((row, i) => (
+        <div key={row.name} className="px-4 py-2.5 flex items-center justify-between text-sm" style={{ borderTop: '1px solid #2B3142' }}>
+          <div className="flex items-center gap-3">
+            <span className="font-mono font-bold w-5 text-center" style={{ color: medals[i] || '#8B90A0' }}>#{i + 1}</span>
+            <span>{row.name}</span>
+          </div>
+          <span className="font-mono tabular-nums text-inkSoft">{row.count} {row.count === 1 ? 'entry' : 'entries'}</span>
         </div>
       ))}
     </div>
@@ -124,15 +170,21 @@ function Overview({ totals }: any) {
         <StatCard label="Net" value={totals.net} tone={totals.net >= 0 ? 'income' : 'expense'} />
       </div>
       {totals.net < 0 && (
-        <div className="rounded-lg px-4 py-3 text-sm mb-5" style={{ background: '#F5E4E0', color: '#A6412F', border: '1px solid #A6412F' }}>
+        <div className="rounded-lg px-4 py-3 text-sm mb-5" style={{ background: 'rgba(248,113,113,0.1)', color: '#F87171', border: '1px solid rgba(248,113,113,0.3)' }}>
           Expenses currently exceed income for this fest by {inr(Math.abs(totals.net))}.
         </div>
       )}
+
       <div className="grid md:grid-cols-2 gap-4 mb-4">
         <BreakdownCard title="Expense by Vendor" data={totals.byVendor} />
         <BreakdownCard title="Expense by Event (allocated)" data={totals.byEventExpense} />
       </div>
-      <BreakdownCard title="Registration Income by Event" data={totals.byEventIncome} />
+      <div className="mb-4">
+        <BreakdownCard title="Registration Income by Event" data={totals.byEventIncome} />
+      </div>
+
+      <div className="circuit-divider" />
+      <Leaderboard data={totals.leaderboard} />
     </div>
   );
 }
@@ -201,16 +253,14 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-border p-5 max-w-2xl">
+    <div className="rounded-xl p-5 max-w-2xl" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
       <div className="flex gap-2 mb-4 flex-wrap">
         {EXPENSE_TYPES.map(t => (
           <button key={t.id} onClick={() => setType(t.id)}
-            className="px-3 py-2 rounded text-sm"
-            style={{
-              background: type === t.id ? '#F5E4E0' : '#fff',
-              color: type === t.id ? '#A6412F' : '#5B6B8C',
-              border: `1px solid ${type === t.id ? '#A6412F' : '#DCE2ED'}`,
-            }}>
+            className="px-3 py-2 rounded-lg text-sm font-medium transition-colors"
+            style={type === t.id
+              ? { background: 'rgba(248,113,113,0.12)', color: '#F87171', border: '1px solid rgba(248,113,113,0.4)' }
+              : { background: 'transparent', color: '#8B90A0', border: '1px solid #2B3142' }}>
             {t.label}
           </button>
         ))}
@@ -356,10 +406,10 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
       </div>
 
       {type !== 'prizepool' && (
-        <div className="mb-4 border-t border-border pt-3">
+        <div className="mb-4 pt-3" style={{ borderTop: '1px solid #2B3142' }}>
           <div className="flex items-center justify-between mb-2">
             <label className="field-label mb-0">Which event(s) used this? (optional)</label>
-            <button onClick={addAllocRow} className="text-xs text-gold">+ Split across event</button>
+            <button onClick={addAllocRow} className="text-xs text-copper">+ Split across event</button>
           </div>
           {allocations.map((row, i) => (
             <div key={i} className="flex gap-2 mb-2 items-center">
@@ -377,9 +427,11 @@ function AddExpenseForm({ festId, vendors, categories, events, onDone }: any) {
       )}
 
       {error && <div className="text-expense text-sm mb-2">{error}</div>}
-      {msg && <div className="text-income text-sm mb-2">{msg}</div>}
-      <button onClick={submit} disabled={pending} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">
-        {pending ? 'Saving…' : 'Log Expense'}
+      {msg && <div className="text-income text-sm mb-2 success-pop">✓ {msg}</div>}
+      <button onClick={submit} disabled={pending}
+        className="px-4 py-2.5 rounded-lg text-sm font-bold tracking-wide transition disabled:opacity-60"
+        style={{ background: '#E8A33D', color: '#12151B' }}>
+        {pending ? 'SAVING…' : 'LOG EXPENSE'}
       </button>
     </div>
   );
@@ -411,16 +463,14 @@ function AddIncomeForm({ festId, events, categories, onDone }: any) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-border p-5 max-w-2xl">
+    <div className="rounded-xl p-5 max-w-2xl" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
       <div className="flex gap-2 mb-4">
         {[['registration', 'Registration'], ['sponsorship', 'Sponsorship'], ['other', 'Other']].map(([id, label]) => (
           <button key={id} onClick={() => setType(id)}
-            className="flex-1 py-2 rounded text-sm"
-            style={{
-              background: type === id ? '#E1EFEA' : '#fff',
-              color: type === id ? '#276B5D' : '#5B6B8C',
-              border: `1px solid ${type === id ? '#276B5D' : '#DCE2ED'}`,
-            }}>
+            className="flex-1 py-2 rounded-lg text-sm font-medium transition-colors"
+            style={type === id
+              ? { background: 'rgba(74,222,128,0.12)', color: '#4ADE80', border: '1px solid rgba(74,222,128,0.4)' }
+              : { background: 'transparent', color: '#8B90A0', border: '1px solid #2B3142' }}>
             {label}
           </button>
         ))}
@@ -475,9 +525,11 @@ function AddIncomeForm({ festId, events, categories, onDone }: any) {
       </div>
 
       {error && <div className="text-expense text-sm mb-2">{error}</div>}
-      {msg && <div className="text-income text-sm mb-2">{msg}</div>}
-      <button onClick={submit} disabled={pending} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">
-        {pending ? 'Saving…' : 'Log Income'}
+      {msg && <div className="text-income text-sm mb-2 success-pop">✓ {msg}</div>}
+      <button onClick={submit} disabled={pending}
+        className="px-4 py-2.5 rounded-lg text-sm font-bold tracking-wide transition disabled:opacity-60"
+        style={{ background: '#E8A33D', color: '#12151B' }}>
+        {pending ? 'SAVING…' : 'LOG INCOME'}
       </button>
     </div>
   );
@@ -495,7 +547,7 @@ function ProofLink({ url, label }: { url: string | null | undefined; label: stri
   const safe = safeExternalUrl(url);
   if (!safe) return <span className="text-inkSoft">—</span>;
   return (
-    <a href={safe} target="_blank" rel="noopener noreferrer" className="text-gold">
+    <a href={safe} target="_blank" rel="noopener noreferrer" className="text-copper hover:underline">
       {label}
     </a>
   );
@@ -517,45 +569,51 @@ function EntriesList({ festId, expenses, income }: any) {
   return (
     <div>
       <div className="flex gap-2 mb-3">
-        <button onClick={() => setView('expense')} className="px-3 py-1 rounded text-sm" style={{ background: view === 'expense' ? '#F5E4E0' : 'transparent', color: view === 'expense' ? '#A6412F' : '#5B6B8C' }}>Expenses ({expenses.length})</button>
-        <button onClick={() => setView('income')} className="px-3 py-1 rounded text-sm" style={{ background: view === 'income' ? '#E1EFEA' : 'transparent', color: view === 'income' ? '#276B5D' : '#5B6B8C' }}>Income ({income.length})</button>
+        <button onClick={() => setView('expense')} className="px-3 py-1 rounded-full text-sm transition-colors"
+          style={{ background: view === 'expense' ? 'rgba(248,113,113,0.12)' : 'transparent', color: view === 'expense' ? '#F87171' : '#8B90A0' }}>
+          Expenses ({expenses.length})
+        </button>
+        <button onClick={() => setView('income')} className="px-3 py-1 rounded-full text-sm transition-colors"
+          style={{ background: view === 'income' ? 'rgba(74,222,128,0.12)' : 'transparent', color: view === 'income' ? '#4ADE80' : '#8B90A0' }}>
+          Income ({income.length})
+        </button>
       </div>
 
-      <div className="bg-white rounded-lg border border-border overflow-x-auto">
+      <div className="rounded-xl overflow-x-auto" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
         {view === 'expense' ? (
           <table className="w-full text-sm min-w-[850px]">
-            <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Vendor/Paid By</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-left">Proof</th><th className="px-3 py-2"></th></tr></thead>
+            <thead><tr className="text-inkSoft text-xs uppercase" style={{ background: '#161A22' }}><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Item</th><th className="px-3 py-2 text-left">Vendor/Paid By</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-left">Proof</th><th className="px-3 py-2"></th></tr></thead>
             <tbody>
               {expenses.map((e: any) => (
-                <tr key={e.id} className="border-t border-border">
-                  <td className="px-3 py-2 whitespace-nowrap">{e.expense_date}</td>
+                <tr key={e.id} style={{ borderTop: '1px solid #2B3142' }}>
+                  <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">{e.expense_date}</td>
                   <td className="px-3 py-2 text-xs text-inkSoft">{TYPE_LABELS[e.expense_type] || e.expense_type}</td>
                   <td className="px-3 py-2">{e.item_name}</td>
                   <td className="px-3 py-2 text-inkSoft">{e.vendors?.name || e.paid_by_volunteer || '—'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-expense font-semibold">{inr(e.amount)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-semibold" style={{ color: '#F87171' }}>{inr(e.amount)}</td>
                   <td className="px-3 py-2 whitespace-nowrap">
                     <ProofLink url={e.invoice_link} label="Invoice" />
                     {e.payment_proof_link && <span className="text-inkSoft"> · </span>}
                     <ProofLink url={e.payment_proof_link} label="Payment" />
                   </td>
-                  <td className="px-3 py-2"><button onClick={() => removeExpense(e.id)} className="text-expense text-xs">Delete</button></td>
+                  <td className="px-3 py-2"><button onClick={() => removeExpense(e.id)} className="text-expense text-xs hover:underline">Delete</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
         ) : (
           <table className="w-full text-sm min-w-[750px]">
-            <thead><tr className="bg-bg text-inkSoft text-xs uppercase"><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Source</th><th className="px-3 py-2 text-right">Registrations</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-left">Proof</th><th className="px-3 py-2"></th></tr></thead>
+            <thead><tr className="text-inkSoft text-xs uppercase" style={{ background: '#161A22' }}><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Type</th><th className="px-3 py-2 text-left">Source</th><th className="px-3 py-2 text-right">Registrations</th><th className="px-3 py-2 text-right">Amount</th><th className="px-3 py-2 text-left">Proof</th><th className="px-3 py-2"></th></tr></thead>
             <tbody>
               {income.map((i: any) => (
-                <tr key={i.id} className="border-t border-border">
-                  <td className="px-3 py-2 whitespace-nowrap">{i.income_date}</td>
+                <tr key={i.id} style={{ borderTop: '1px solid #2B3142' }}>
+                  <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">{i.income_date}</td>
                   <td className="px-3 py-2 text-xs text-inkSoft">{i.income_type}</td>
                   <td className="px-3 py-2">{i.source_name || '—'}</td>
                   <td className="px-3 py-2 text-right">{i.registrations_count ?? '—'}</td>
-                  <td className="px-3 py-2 text-right font-mono text-income font-semibold">{inr(i.amount)}</td>
+                  <td className="px-3 py-2 text-right font-mono font-semibold" style={{ color: '#4ADE80' }}>{inr(i.amount)}</td>
                   <td className="px-3 py-2"><ProofLink url={i.drive_link} label="View" /></td>
-                  <td className="px-3 py-2"><button onClick={() => removeIncome(i.id)} className="text-expense text-xs">Delete</button></td>
+                  <td className="px-3 py-2"><button onClick={() => removeIncome(i.id)} className="text-expense text-xs hover:underline">Delete</button></td>
                 </tr>
               ))}
             </tbody>
@@ -666,9 +724,13 @@ function ExportPanel({ fest, events, expenses, income, allocations }: any) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-border p-5 max-w-md">
+    <div className="rounded-xl p-5 max-w-md" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
       <p className="text-sm text-inkSoft mb-4">Downloads one Excel file: a Summary, one sheet per expense category (Stationery, Food, etc.), dedicated sheets for Volunteer Expenditure / Cab Travel / Personal Vehicle / Prizepool, and both a daily Income log and a per-event Income Summary.</p>
-      <button onClick={exportExcel} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">Download Excel Report</button>
+      <button onClick={exportExcel}
+        className="px-4 py-2.5 rounded-lg text-sm font-bold tracking-wide transition"
+        style={{ background: '#E8A33D', color: '#12151B' }}>
+        DOWNLOAD EXCEL REPORT
+      </button>
     </div>
   );
 }

@@ -3,6 +3,9 @@
 import { useState, useTransition } from 'react';
 import { createUser, updateUserRole, deleteUser, resetUserPassword } from './actions';
 
+const surfaceCard = { background: '#1A1E27', border: '1px solid #2B3142' };
+const primaryBtn = { background: '#E8A33D', color: '#12151B' };
+
 type Profile = { id: string; full_name: string; role: string; created_at: string };
 
 export default function UserManager({ profiles }: { profiles: Profile[] }) {
@@ -51,10 +54,12 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
     });
   }
 
+  const roleColor = (role: string) => role === 'master' ? '#E8A33D' : role === 'admin' ? '#4ADE80' : '#8B90A0';
+
   return (
     <div>
-      <div className="bg-white rounded-lg border border-border p-5 mb-6">
-        <div className="font-display text-lg mb-3">Add Account</div>
+      <div className="rounded-xl p-5 mb-6" style={surfaceCard}>
+        <div className="font-display font-semibold text-lg tracking-wide mb-3">Add Account</div>
         <div className="grid md:grid-cols-2 gap-x-4 gap-y-3 mb-3">
           <div>
             <label className="field-label">Full Name</label>
@@ -78,17 +83,17 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
           </div>
         </div>
         {error && <div className="text-expense text-sm mb-2">{error}</div>}
-        {msg && <div className="text-income text-sm mb-2">{msg}</div>}
-        <button onClick={submit} disabled={pending} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">
-          {pending ? 'Working…' : 'Create Account'}
+        {msg && <div className="text-income text-sm mb-2 success-pop">✓ {msg}</div>}
+        <button onClick={submit} disabled={pending} className="px-4 py-2.5 rounded-lg text-sm font-bold tracking-wide" style={primaryBtn}>
+          {pending ? 'WORKING…' : 'CREATE ACCOUNT'}
         </button>
         <p className="text-xs text-inkSoft mt-2">Share the email + temporary password with them directly (not over a public channel). They can log in immediately.</p>
       </div>
 
-      <div className="bg-white rounded-lg border border-border overflow-x-auto">
+      <div className="rounded-xl overflow-x-auto" style={surfaceCard}>
         <table className="w-full text-sm min-w-[500px]">
           <thead>
-            <tr className="bg-bg text-inkSoft text-xs uppercase">
+            <tr className="text-inkSoft text-xs uppercase" style={{ background: '#161A22' }}>
               <th className="px-4 py-2 text-left">Name</th>
               <th className="px-4 py-2 text-left">Role</th>
               <th className="px-4 py-2"></th>
@@ -96,18 +101,18 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
           </thead>
           <tbody>
             {profiles.map(p => (
-              <tr key={p.id} className="border-t border-border">
+              <tr key={p.id} style={{ borderTop: '1px solid #2B3142' }}>
                 <td className="px-4 py-2.5">{p.full_name}</td>
                 <td className="px-4 py-2.5">
-                  <select value={p.role} onChange={e => changeRole(p.id, e.target.value)} className="!w-auto">
+                  <select value={p.role} onChange={e => changeRole(p.id, e.target.value)} className="!w-auto" style={{ color: roleColor(p.role) }}>
                     <option value="user">User</option>
                     <option value="admin">Admin</option>
                     <option value="master">Master</option>
                   </select>
                 </td>
                 <td className="px-4 py-2.5 text-right whitespace-nowrap">
-                  <button onClick={() => { setResetTarget(p); setResetPassword(''); setResetError(''); }} className="text-gold text-xs mr-3">Reset Password</button>
-                  <button onClick={() => remove(p.id)} className="text-expense text-xs">Remove</button>
+                  <button onClick={() => { setResetTarget(p); setResetPassword(''); setResetError(''); }} className="text-copper text-xs mr-3 hover:underline">Reset Password</button>
+                  <button onClick={() => remove(p.id)} className="text-expense text-xs hover:underline">Remove</button>
                 </td>
               </tr>
             ))}
@@ -116,17 +121,17 @@ export default function UserManager({ profiles }: { profiles: Profile[] }) {
       </div>
 
       {resetTarget && (
-        <div className="bg-white rounded-lg border border-gold p-5 mt-4 max-w-md">
-          <div className="font-display text-lg mb-1">Reset Password — {resetTarget.full_name}</div>
+        <div className="rounded-xl p-5 mt-4 max-w-md" style={{ background: '#1A1E27', border: '1px solid #E8A33D' }}>
+          <div className="font-display font-semibold text-lg tracking-wide mb-1">Reset Password — {resetTarget.full_name}</div>
           <p className="text-xs text-inkSoft mb-3">Sets a new password immediately. Share it with them directly (not over a public channel).</p>
           <label className="field-label">New Password (min 8 characters)</label>
           <input type="text" value={resetPassword} onChange={e => setResetPassword(e.target.value)} className="mb-3" />
           {resetError && <div className="text-expense text-sm mb-2">{resetError}</div>}
           <div className="flex gap-2">
-            <button onClick={submitReset} disabled={pending} className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">
-              {pending ? 'Working…' : 'Set New Password'}
+            <button onClick={submitReset} disabled={pending} className="px-4 py-2.5 rounded-lg text-sm font-bold tracking-wide" style={primaryBtn}>
+              {pending ? 'WORKING…' : 'SET NEW PASSWORD'}
             </button>
-            <button onClick={() => { setResetTarget(null); setResetPassword(''); }} className="px-4 py-2 rounded text-sm" style={{ border: '1px solid #DCE2ED', color: '#5B6B8C' }}>
+            <button onClick={() => { setResetTarget(null); setResetPassword(''); }} className="px-4 py-2 rounded-lg text-sm" style={{ border: '1px solid #2B3142', color: '#8B90A0' }}>
               Cancel
             </button>
           </div>

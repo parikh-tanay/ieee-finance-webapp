@@ -9,7 +9,7 @@ export default async function MasterPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <Nav />
-      <h1 className="font-display text-2xl mb-1">Master — User Accounts</h1>
+      <h1 className="font-display font-bold text-2xl tracking-wide mb-1">MASTER — USER ACCOUNTS</h1>
       <p className="text-inkSoft text-sm mb-6">Create accounts for Admins and Users. Only Master can change roles or remove accounts.</p>
       <UserManager profiles={profiles || []} />
     </div>

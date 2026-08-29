@@ -2,23 +2,94 @@
 @tailwind components;
 @tailwind utilities;
 
+body {
+  font-family: var(--font-body), sans-serif;
+}
+
 input, select, textarea {
-  border: 1px solid #DCE2ED;
-  border-radius: 0.375rem;
-  padding: 0.5rem 0.75rem;
+  border: 1px solid #2B3142;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
   font-size: 0.875rem;
   width: 100%;
-  background: white;
+  background: #1A1E27;
+  color: #EDEDEF;
+}
+input::placeholder, textarea::placeholder {
+  color: #565C6D;
 }
 input:focus, select:focus, textarea:focus {
-  outline: 2px solid #B8892B;
+  outline: 2px solid #E8A33D;
   outline-offset: 1px;
+  border-color: #E8A33D;
 }
 label.field-label {
   display: block;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #5B6B8C;
-  margin-bottom: 0.25rem;
+  color: #8B90A0;
+  margin-bottom: 0.3rem;
+  font-weight: 600;
 }
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Circuit-trace divider: a thin line with a small node, echoing a PCB trace */
+.circuit-divider {
+  position: relative;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #2B3142 15%, #2B3142 85%, transparent);
+  margin: 1.5rem 0;
+}
+.circuit-divider::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  width: 6px;
+  height: 6px;
+  background: #E8A33D;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes meterPowerOn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .meter-in {
+    animation: meterPowerOn 0.4s ease-out;
+  }
+
+  @keyframes pulseDot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+    50% { opacity: 0.6; }
+  }
+  .status-dot-live {
+    animation: pulseDot 2s ease-in-out infinite;
+  }
+
+  @keyframes successPop {
+    0% { transform: scale(0.9); opacity: 0; }
+    60% { transform: scale(1.03); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .success-pop {
+    animation: successPop 0.3s ease-out;
+  }
+
+  @keyframes shimmerBorder {
+    0% { border-color: #2B3142; }
+    50% { border-color: #E8A33D; }
+    100% { border-color: #2B3142; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter-in, .status-dot-live, .success-pop { animation: none !important; }
+}
+

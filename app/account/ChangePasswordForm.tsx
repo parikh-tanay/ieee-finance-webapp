@@ -26,6 +26,11 @@ export default function ChangePasswordForm() {
     setLoading(true);
     const supabase = createClient();
 
+    // Re-verify identity with the current password before allowing the
+    // change — updateUser() alone only checks that the session is valid,
+    // not that the person typing knows the current password. This closes
+    // the gap where someone walks up to an already-logged-in, unattended
+    // laptop and changes the password to lock the real owner out.
     const { data: { user } } = await supabase.auth.getUser();
     if (!user?.email) {
       setError('Could not verify your account. Try signing in again.');
@@ -56,7 +61,7 @@ export default function ChangePasswordForm() {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-border p-5 max-w-md">
+    <div className="rounded-xl p-5 max-w-md" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
       <label className="field-label">Current Password</label>
       <input type="password" value={current} onChange={e => setCurrent(e.target.value)} className="mb-3" />
 
@@ -67,11 +72,11 @@ export default function ChangePasswordForm() {
       <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} className="mb-4" />
 
       {error && <div className="text-expense text-sm mb-3">{error}</div>}
-      {msg && <div className="text-income text-sm mb-3">{msg}</div>}
+      {msg && <div className="text-income text-sm mb-3 success-pop">✓ {msg}</div>}
 
       <button onClick={handleChangePassword} disabled={loading}
-        className="px-4 py-2 rounded bg-navy text-white text-sm font-medium">
-        {loading ? 'Updating…' : 'Change Password'}
+        className="px-4 py-2.5 rounded-lg text-sm font-bold tracking-wide" style={{ background: '#E8A33D', color: '#12151B' }}>
+        {loading ? 'UPDATING…' : 'CHANGE PASSWORD'}
       </button>
     </div>
   );
