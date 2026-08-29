@@ -1,10 +1,14 @@
 'use client';
 
-import { useState, useMemo, useTransition } from 'react';
+import { useState, useMemo, useTransition, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { addExpense, addIncome, deleteExpense, deleteIncome } from './actions';
 import { safeExternalUrl } from '@/lib/safeUrl';
 import { AnimatedNumber, StatusDot } from '@/components/Meter';
+import { createClient } from '@/lib/supabase/client';
+import { ToastStack, type Toast } from '@/components/Toast';
+import { PresenceBar } from '@/components/PresenceBar';
+import { CategoryBarChart } from '@/components/CategoryBarChart';
 
 function inr(n: number) { return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
@@ -20,10 +24,103 @@ const EMPTY_FORM = {
   invoiceLink: '', paymentProofLink: '', notes: '',
 };
 
-export default function FestWorkspace({ fest, events, vendors, categories, expenses, income, allocations, profiles }: any) {
+export default function FestWorkspace({ fest, events, vendors, categories, expenses: initialExpenses, income: initialIncome, allocations: initialAllocations, profiles }: any) {
   const [tab, setTab] = useState('overview');
+  const [expenses, setExpenses] = useState(initialExpenses);
+  const [income, setIncome] = useState(initialIncome);
+  const [allocations, setAllocations] = useState(initialAllocations);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<{ name: string }[]>([]);
+  const currentUserIdRef = useRef<string | null>(null);
+  const nameByIdRef = useRef<Record<string, string>>({});
+  const categoryByIdRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    nameByIdRef.current = {};
+    (profiles || []).forEach((p: any) => { nameByIdRef.current[p.id] = p.full_name; });
+    categoryByIdRef.current = {};
+    (categories || []).forEach((c: any) => { categoryByIdRef.current[c.id] = c.name; });
+  }, [profiles, categories]);
+
   const expenseCategories = categories.filter((c: any) => c.kind === 'expense');
   const incomeCategories = categories.filter((c: any) => c.kind === 'income');
+
+  function pushToast(message: string, tone: 'income' | 'expense') {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    setToasts(t => [...t, { id, message, tone }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 5000);
+  }
+
+  // Re-fetches this fest's data with the same joins the server page uses,
+  // keeping shapes consistent. Simpler and more robust than trying to
+  // hand-merge partial realtime payloads (which don't include joined
+  // vendor/category names).
+  async function refreshFestData() {
+    const supabase = createClient();
+    const [{ data: newExpenses }, { data: newIncome }, { data: newAllocations }] = await Promise.all([
+      supabase.from('expenses').select('*, vendors(name), categories(name)').eq('fest_id', fest.id).order('expense_date', { ascending: false }),
+      supabase.from('income_entries').select('*, categories(name)').eq('fest_id', fest.id).order('income_date', { ascending: false }),
+      supabase.from('expense_allocations').select('*'),
+    ]);
+    if (newExpenses) setExpenses(newExpenses);
+    if (newIncome) setIncome(newIncome);
+    if (newAllocations) setAllocations(newAllocations);
+  }
+
+  useEffect(() => {
+    const supabase = createClient();
+    let mounted = true;
+
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (mounted) currentUserIdRef.current = user?.id || null;
+    });
+
+    // --- Live data sync + activity toasts ---
+    const dataChannel = supabase
+      .channel(`fest-data-${fest.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `fest_id=eq.${fest.id}` }, (payload) => {
+        if (payload.eventType === 'INSERT' && payload.new.created_by !== currentUserIdRef.current) {
+          const who = nameByIdRef.current[payload.new.created_by] || 'Someone';
+          const cat = categoryByIdRef.current[payload.new.category_id] || TYPE_LABELS[payload.new.expense_type] || 'expense';
+          pushToast(`${who} logged ${inr(payload.new.amount)} for ${cat}`, 'expense');
+        }
+        refreshFestData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'income_entries', filter: `fest_id=eq.${fest.id}` }, (payload) => {
+        if (payload.eventType === 'INSERT' && payload.new.created_by !== currentUserIdRef.current) {
+          const who = nameByIdRef.current[payload.new.created_by] || 'Someone';
+          pushToast(`${who} logged ${inr(payload.new.amount)} income (${payload.new.income_type})`, 'income');
+        }
+        refreshFestData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_allocations' }, () => {
+        refreshFestData();
+      })
+      .subscribe();
+
+    // --- Presence: who currently has this fest open ---
+    const presenceChannel = supabase.channel(`fest-presence-${fest.id}`, { config: { presence: { key: crypto.randomUUID() } } });
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const users = Object.values(state).flat().map((p: any) => ({ name: p.name }));
+        setOnlineUsers(users);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          const { data: { user } } = await supabase.auth.getUser();
+          const name = user ? (nameByIdRef.current[user.id] || 'Teammate') : 'Teammate';
+          await presenceChannel.track({ name });
+        }
+      });
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(dataChannel);
+      supabase.removeChannel(presenceChannel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fest.id]);
 
   const totals = useMemo(() => {
     const totalExpense = expenses.reduce((s: number, e: any) => s + Number(e.amount), 0);
@@ -63,11 +160,27 @@ export default function FestWorkspace({ fest, events, vendors, categories, expen
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome, leaderboard };
+    // Chart data: expense by category (vendor purchases), for the interactive bar chart.
+    const byCategoryChart: Record<string, number> = {};
+    expenses.filter((e: any) => e.expense_type === 'vendor_purchase').forEach((e: any) => {
+      const key = e.categories?.name || 'Uncategorized';
+      byCategoryChart[key] = (byCategoryChart[key] || 0) + Number(e.amount);
+    });
+    const chartData = Object.entries(byCategoryChart)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    return { totalExpense, totalIncome, net: totalIncome - totalExpense, byVendor, byEventExpense, byEventIncome, leaderboard, chartData };
   }, [expenses, income, allocations, events, profiles]);
 
   return (
     <div>
+      <ToastStack toasts={toasts} />
+
+      <div className="mb-3">
+        <PresenceBar users={onlineUsers} />
+      </div>
+
       <div className="mb-5 flex items-center gap-2">
         <StatusDot color={fest.status === 'active' ? '#4ADE80' : '#8B90A0'} live={fest.status === 'active'} />
         <div>
@@ -174,6 +287,13 @@ function Overview({ totals }: any) {
           Expenses currently exceed income for this fest by {inr(Math.abs(totals.net))}.
         </div>
       )}
+
+      <div className="rounded-xl mb-4" style={{ background: '#1A1E27', border: '1px solid #2B3142' }}>
+        <div className="px-4 py-2.5 font-display font-semibold tracking-wide" style={{ borderBottom: '1px solid #2B3142' }}>Expense by Category</div>
+        <div className="p-2">
+          <CategoryBarChart data={totals.chartData} />
+        </div>
+      </div>
 
       <div className="grid md:grid-cols-2 gap-4 mb-4">
         <BreakdownCard title="Expense by Vendor" data={totals.byVendor} />

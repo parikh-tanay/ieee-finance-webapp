@@ -9,20 +9,21 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@supabase/ssr": "0.5.2",
+    "@supabase/supabase-js": "2.112.3",
     "next": "16.3.2",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "@supabase/ssr": "0.5.2",
-    "@supabase/supabase-js": "2.112.3",
+    "recharts": "^2.15.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "typescript": "5.6.3",
     "@types/node": "20.14.15",
     "@types/react": "19.0.1",
     "@types/react-dom": "19.0.1",
-    "tailwindcss": "3.4.9",
+    "autoprefixer": "10.4.20",
     "postcss": "8.5.26",
-    "autoprefixer": "10.4.20"
+    "tailwindcss": "3.4.9",
+    "typescript": "5.6.3"
   }
 }
